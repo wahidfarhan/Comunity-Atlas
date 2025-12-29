@@ -1,4 +1,4 @@
-![Community Atlas Preview](mapPic.jpeg)
+![Community Atlas Preview](mapPic.jpg)
 
 # 🌍 Community Atlas: A Hyper-Local Interactive Dashboard
 
