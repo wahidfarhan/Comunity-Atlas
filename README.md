@@ -141,7 +141,7 @@ Community Atlas aims to:
 ## 👤 Author
 
 **Presented by:**  
-**Wাহিদুর রহমান ফারহান (Wahidur Rahman Farhan)**
+**ওয়াহিদুর রহমান ফারহান (Wahidur Rahman Farhan)**
 
 ---
 
