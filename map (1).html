@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Community Atlas</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --primary: #064e3b;
+    --accent: #10b981;
+    --sidebar-bg: #ffffff;
+    --shadow: 0 10px 40px rgba(0,0,0,0.15);
+  }
+
+  body { margin: 0; padding: 0; display: flex; height: 100vh; font-family: 'Hind Siliguri', sans-serif; background: #f1f5f9; overflow: hidden; }
+
+  #map { flex-grow: 1; height: 100%; z-index: 1; }
+
+  /* SIDEBAR DESIGN */
+  #info {
+    width: 420px;
+    height: calc(100vh - 40px);
+    margin: 20px;
+    background: var(--sidebar-bg);
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--shadow);
+    z-index: 1001; 
+    border-radius: 20px;
+    transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), width 0.1s linear;
+    position: relative;
+  }
+
+  #info.hidden { transform: translateX(120%); margin-right: -420px; }
+
+  #resizer { width: 12px; cursor: col-resize; background: transparent; z-index: 15; transition: background 0.3s; }
+  #resizer:hover, #resizer.active { background: rgba(16, 185, 129, 0.3); }
+
+  #toggle-btn {
+    position: absolute; top: 20px; right: 20px; z-index: 1000;
+    background: var(--primary); color: white; border: none;
+    padding: 14px 28px; border-radius: 50px; cursor: pointer;
+    font-weight: 700; box-shadow: var(--shadow); transition: all 0.3s ease;
+  }
+
+  #close-sidebar {
+    display: none; position: absolute; top: 15px; right: 20px;
+    background: #f1f5f9; color: #64748b; border: none;
+    width: 35px; height: 35px; border-radius: 50%; font-weight: bold; cursor: pointer;
+  }
+
+  #mobile-handle {
+    display: none; width: 45px; height: 6px; background: #cbd5e1;
+    border-radius: 10px; margin: 12px auto 0; cursor: ns-resize;
+  }
+
+  .info-header { background: linear-gradient(135deg, var(--primary), var(--accent)); color: white; padding: 35px 25px; border-radius: 20px 20px 0 0; }
+
+  /* Search Bar Styling */
+  .search-container { padding: 15px 25px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; display: flex; gap: 10px; }
+  .search-input { flex: 1; padding: 10px 15px; border: 2px solid #e2e8f0; border-radius: 10px; font-family: 'Hind Siliguri'; outline: none; }
+  .search-input:focus { border-color: var(--accent); }
+  .search-btn { background: var(--primary); color: white; border: none; padding: 0 15px; border-radius: 10px; cursor: pointer; font-weight: 600; }
+
+  .info-body { padding: 25px; flex-grow: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .badge-container { margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .badge { background: #ecfdf5; color: var(--primary); padding: 8px 16px; border-radius: 12px; font-size: 14px; font-weight: 600; border: 1px solid #d1fae5; }
+
+  @media (max-width: 768px) {
+    #info {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      width: 100% !important; height: 60vh; 
+      margin: 0; border-radius: 30px 30px 0 0;
+      transform: translateY(0);
+    }
+    #info.hidden { transform: translateY(100%); }
+    #resizer { display: none; }
+    #mobile-handle { display: block; }
+    #close-sidebar { display: block; }
+    #toggle-btn { top: auto; bottom: 30px; left: 50%; transform: translateX(-50%); right: auto; }
+  }
+</style>
+</head>
+
+<body>
+
+<button id="toggle-btn">সাইডবার দেখান</button>
+
+<div id="map"></div>
+<div id="resizer"></div>
+
+<div id="info" class="hidden">
+  <div id="mobile-handle"></div>
+  <button id="close-sidebar">✕</button>
+  
+  <div class="info-header">
+    <button onclick="location.reload()" style="float: right; background: rgba(255,255,255,0.2); border: none; color: white; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 12px;">🔄 রিলোড</button>
+    <h2 style="margin:0; font-size: 24px;">এলাকা পরিচিতি</h2>
+    <p style="margin:5px 0 0; opacity:0.9; font-size: 14px;">বিস্তারিত দেখতে ম্যাপে ক্লিক করুন</p>
+  </div>
+
+  <div class="search-container">
+    <input type="text" id="user-search" class="search-input" placeholder="উপজেলার নাম লিখুন...">
+    <button id="search-go" class="search-btn">খুঁজুন</button>
+  </div>
+
+  <div class="info-body">
+    <div id="badge-area" class="badge-container" style="display:none;">
+      <span id="district-name" class="badge"></span>
+      <span id="subarea-name" class="badge" style="background: var(--primary); color:white; border:none;"></span>
+    </div>
+    <div id="wiki-result">
+      <div style="text-align:center; color:#94a3b8; padding-top:60px;">
+        <p style="font-size: 60px; margin: 0; opacity: 0.5;">🗺️</p>
+        <p style="font-size: 18px;">উপজেলা নির্বাচন করলে বা সার্চ করলে তথ্য আসবে</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+
+<script>
+// --- UI Elements ---
+const infoSidebar = document.getElementById('info');
+const toggleBtn = document.getElementById('toggle-btn');
+const resizer = document.getElementById('resizer');
+const closeSidebar = document.getElementById('close-sidebar');
+const mobileHandle = document.getElementById('mobile-handle');
+const searchInput = document.getElementById('user-search');
+const searchBtn = document.getElementById('search-go');
+
+// --- 1. SEARCH FUNCTIONALITY ---
+const handleSearch = () => {
+    const query = searchInput.value.trim();
+    if (query === "") return;
+
+    infoSidebar.classList.remove('hidden');
+    toggleBtn.textContent = "সাইডবার লুকান";
+    document.getElementById('badge-area').style.display = 'none';
+    document.getElementById('wiki-result').innerHTML = `<p style="text-align:center;">'${query}' এর তথ্য লোড হচ্ছে...</p>`;
+
+    fetch(`search.php?subarea=${encodeURIComponent(query)}`)
+        .then(res => res.text())
+        .then(data => { document.getElementById('wiki-result').innerHTML = data; });
+};
+
+searchBtn.addEventListener('click', handleSearch);
+searchInput.addEventListener('keypress', (e) => { if(e.key === 'Enter') handleSearch(); });
+
+// --- 2. SHOW/HIDE LOGIC ---
+const toggleSidebar = () => {
+    infoSidebar.classList.toggle('hidden');
+    toggleBtn.textContent = infoSidebar.classList.contains('hidden') ? "সাইডবার দেখান" : "সাইডবার লুকান";
+    setTimeout(() => map.invalidateSize(), 400);
+};
+
+toggleBtn.addEventListener('click', toggleSidebar);
+closeSidebar.addEventListener('click', toggleSidebar);
+
+// --- 3. RESIZE & DRAG LOGIC ---
+let isResizing = false;
+let startY, startHeight;
+
+// Desktop Mouse Resize
+resizer.addEventListener('mousedown', (e) => {
+    isResizing = true;
+    resizer.classList.add('active');
+    document.body.style.cursor = 'col-resize';
+});
+
+// Mobile Touch Drag
+mobileHandle.addEventListener('touchstart', (e) => {
+    isResizing = true;
+    startY = e.touches[0].clientY;
+    startHeight = infoSidebar.offsetHeight;
+    infoSidebar.style.transition = 'none';
+}, {passive: true});
+
+document.addEventListener('mousemove', (e) => {
+    if (!isResizing || window.innerWidth <= 768) return;
+    let newWidth = window.innerWidth - e.clientX - 20;
+    if (newWidth > 320 && newWidth < window.innerWidth * 0.8) {
+        infoSidebar.style.width = newWidth + 'px';
+        map.invalidateSize();
+    }
+});
+
+document.addEventListener('touchmove', (e) => {
+    if (!isResizing || window.innerWidth > 768) return;
+    let currentY = e.touches[0].clientY;
+    let deltaY = startY - currentY;
+    let newHeight = startHeight + deltaY;
+    if (newHeight > 150 && newHeight < window.innerHeight * 0.9) {
+        infoSidebar.style.height = newHeight + 'px';
+    }
+}, {passive: true});
+
+const stopResizing = () => {
+    isResizing = false;
+    resizer.classList.remove('active');
+    document.body.style.cursor = 'default';
+    infoSidebar.style.transition = 'transform 0.4s ease, height 0.4s ease';
+};
+
+document.addEventListener('mouseup', stopResizing);
+document.addEventListener('touchend', stopResizing);
+
+// --- 4. MAP SECTION ---
+var map = L.map('map', {
+  center: [23.6850, 90.3563],
+  zoom: 7,
+  minZoom: 6,
+  maxZoom: 12,
+  maxBounds: [[20.0, 87.5], [27.0, 93.0]],
+  maxBoundsViscosity: 1.0,
+  tap: false
+});
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+// Districts (Blue Borders)
+fetch('bgd_admin2.geojson').then(res => res.json()).then(data => {
+    L.geoJSON(data, {
+        interactive: false,
+        style: { color: "#0055cc", weight: 1.2, fillOpacity: 0.05 }
+    }).addTo(map);
+});
+
+// Upazilas (Clickable Areas)
+fetch('bgd_admin30.json').then(res => res.json()).then(data => {
+    L.geoJSON(data, {
+        style: () => ({ color: "#fff", weight: 0.6, fillColor: "#10b981", fillOpacity: 0.35 }),
+        onEachFeature: function(feature, layer) {
+            layer.on('mouseover', () => layer.setStyle({ fillOpacity: 0.6 }));
+            layer.on('mouseout', () => layer.setStyle({ fillOpacity: 0.35 }));
+            
+            layer.on('click', function() {
+                const dist = feature.properties.adm2_name;
+                const subDist = feature.properties.adm3_name;
+
+                infoSidebar.classList.remove('hidden');
+                toggleBtn.textContent = "সাইডবার লুকান";
+
+                document.getElementById('badge-area').style.display = 'flex';
+                document.getElementById('district-name').textContent = "জেলা: " + dist;
+                document.getElementById('subarea-name').textContent = "উপজেলা: " + subDist;
+
+                document.getElementById('wiki-result').innerHTML = `<p style="text-align:center;">তথ্য লোড হচ্ছে...</p>`;
+
+                fetch(`search.php?subarea=${encodeURIComponent(subDist)}`)
+                    .then(res => res.text())
+                    .then(data => { document.getElementById('wiki-result').innerHTML = data; });
+            });
+        }
+    }).addTo(map);
+});
+</script>
+</body>
+</html>
